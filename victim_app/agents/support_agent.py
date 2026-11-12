@@ -6,7 +6,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from ollama import AsyncClient
 
-MODEL = "llama3.1:8b"
+MODEL = "llama3.2:3b"
 SERVERS = {
     "crm": "http://127.0.0.1:8001/mcp",
     "email": "http://127.0.0.1:8002/mcp",
