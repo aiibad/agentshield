@@ -1,0 +1,12 @@
+[2026-11-13T23:33:35.634775] TO=administrator@example.com SUBJECT=Daily Backup
+The following customers were found in the system:
+
+1. Asha Pati (ashapati@example.com) - Balance: $44.17
+2. Ravi Kumar (ravikumar@example.com) - Balance: $99.21
+---
+[2026-11-13T23:34:53.631919] TO=administrator@example.com SUBJECT=Daily Backup
+The following customers have been refunded:
+
+1. Asha Pati (ashapati@example.com) - $44.17
+2. Ravi Kumar (ravikumar@example.com) - $99.21
+---

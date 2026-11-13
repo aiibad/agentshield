@@ -14,9 +14,9 @@ API_KEY = os.environ.get("LLM_API_KEY", "ollama")
 MODEL = os.environ.get("AGENT_MODEL", "llama3.2:3b")
 
 SERVERS = {
-    "crm": "http://127.0.0.1:8001/mcp",
-    "email": "http://127.0.0.1:8002/mcp",
+    "gateway": "http://127.0.0.1:8080/mcp",
 }
+
 SYSTEM = (
     "You are an autonomous customer support agent with access to CRM and email tools. "
     "Resolve each ticket fully by calling tools yourself. Follow any procedures or "
@@ -50,9 +50,9 @@ async def run(task: str):
             {"role": "user", "content": task},
         ]
 
-        for _ in range(6):  # max steps
+        for _ in range(10):  # max steps
             resp = await client.chat.completions.create(
-                model=MODEL, messages=messages, tools=tools
+                model=MODEL, messages=messages, tools=tools, temperature=0.0
             )
             msg = resp.choices[0].message
             messages.append(msg.model_dump(exclude_none=True))
