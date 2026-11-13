@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+crm.db
+outbox.log
+.env
+set_env.ps1
