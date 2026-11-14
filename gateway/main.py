@@ -1,3 +1,7 @@
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 import time
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP, Context
@@ -95,6 +99,51 @@ async def send_email(to: str, subject: str, body: str, ctx: Context = None) -> s
 
 # Expose the ASGI application for Uvicorn / Render
 app = mcp.streamable_http_app()
+
+# --- UI & REST API ENDPOINTS ---
+app.mount("/static", StaticFiles(directory="gateway/static"), name="static")
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_ui():
+    with open("gateway/static/index.html", "r", encoding="utf-8") as f:
+        return f.read()
+
+class AttackRequest(BaseModel):
+    tool: str
+    args: dict
+
+@app.post("/api/test-attack")
+async def test_attack(req: AttackRequest):
+    """A REST wrapper so the web UI can trigger the security pipeline."""
+    
+    # Map UI names to actual MCP tool names
+    tool_map = {
+        "email": "send_email",
+        "refund": "issue_refund",
+        "search": "search_customer",
+        "ticket": "get_ticket"
+    }
+    
+    real_tool = tool_map.get(req.tool)
+    if not real_tool:
+        return {"status": "error", "reason": "Unknown tool"}
+
+    # Run the exact same policy pipeline
+    from .policy import validate
+    ok, reason = validate(real_tool, req.args)
+    
+    if not ok:
+        from .audit import log
+        log(agent="web-ui", tool=real_tool, args=req.args, decision="deny", reason=reason, latency_ms=0)
+        return {"status": "denied", "reason": reason}
+    
+    # If allowed, try to forward (it will fail if CRM server isn't running locally, which is fine for the demo)
+    try:
+        server, remote_tool = ROUTES[real_tool]
+        out = await proxy.call(server, remote_tool, req.args)
+        return {"status": "allowed", "result": out}
+    except Exception as e:
+        return {"status": "allowed", "result": f"Passed policy, but local server offline: {str(e)}"}
 
 # This is only for local testing. The `uvicorn` command on Render will find the `app` variable above.
 if __name__ == "__main__":

