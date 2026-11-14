@@ -19,12 +19,17 @@ proxy = MCPProxy({"crm": settings.crm_url, "email": settings.email_url})
 @asynccontextmanager
 async def lifespan(mcp_app):
     print("Starting Gateway proxy...")
-    await proxy.start()
-    print("Gateway proxy started successfully!")
+    try:
+        await proxy.start()
+        print("Gateway proxy started successfully!")
+    except Exception as e:
+        print(f"WARNING: Could not connect to local MCP servers: {e}")
+        print("Gateway is running in standalone mode (policies/auth will still work).")
     yield
-    await proxy.stop()
-
-mcp = FastMCP("agentshield-gateway", lifespan=lifespan, host=settings.gateway_host, port=settings.gateway_port)
+    try:
+        await proxy.stop()
+    except:
+        pass
 
 async def _guarded(tool: str, args: dict, ctx: Context) -> str:
     t0 = time.perf_counter()
@@ -88,5 +93,10 @@ async def send_email(to: str, subject: str, body: str, ctx: Context = None) -> s
     """Send an email to any recipient."""
     return await _guarded("send_email", {"to": to, "subject": subject, "body": body}, ctx)
 
+# Expose the ASGI application for Uvicorn / Render
+app = mcp.streamable_http_app()
+
+# This is only for local testing. The `uvicorn` command on Render will find the `app` variable above.
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    import uvicorn
+    uvicorn.run(app, host=settings.gateway_host, port=settings.gateway_port)
