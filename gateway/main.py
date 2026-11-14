@@ -1,7 +1,7 @@
 import time
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP, Context
-from fastapi import Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -22,7 +22,7 @@ ROUTES = {
 proxy = MCPProxy({"crm": settings.crm_url, "email": settings.email_url})
 
 @asynccontextmanager
-async def lifespan(mcp_app):
+async def lifespan(app: FastAPI):
     print("Starting Gateway proxy...")
     try:
         await proxy.start()
@@ -36,8 +36,8 @@ async def lifespan(mcp_app):
     except:
         pass
 
-# 1. Initialize MCP FIRST
-mcp = FastMCP("agentshield-gateway", lifespan=lifespan, host=settings.gateway_host, port=settings.gateway_port)
+# 1. Initialize MCP (without lifespan)
+mcp = FastMCP("agentshield-gateway")
 
 async def _guarded(tool: str, args: dict, ctx: Context) -> str:
     t0 = time.perf_counter()
@@ -75,7 +75,7 @@ async def _guarded(tool: str, args: dict, ctx: Context) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# 2. Define MCP Tools SECOND
+# 2. Define MCP Tools
 @mcp.tool()
 async def search_customer(name: str = "", ctx: Context = None) -> str:
     """Search customers by name."""
@@ -96,10 +96,14 @@ async def send_email(to: str, subject: str, body: str, ctx: Context = None) -> s
     """Send an email to any recipient."""
     return await _guarded("send_email", {"to": to, "subject": subject, "body": body}, ctx)
 
-# 3. Create the FastAPI App THIRD
-app = mcp.streamable_http_app()
+# 3. Create the FastAPI App for the UI
+app = FastAPI(title="AgentShield Gateway", lifespan=lifespan)
 
-# 4. Add UI Routes LAST
+# 4. Mount the MCP app at /mcp
+mcp_app = mcp.streamable_http_app()
+app.mount("/mcp", mcp_app)
+
+# 5. Add UI Routes
 app.mount("/static", StaticFiles(directory="gateway/static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
@@ -127,7 +131,3 @@ async def test_attack(req: AttackRequest):
         return {"status": "denied", "reason": reason}
     
     return {"status": "allowed", "result": "Passed security policies! (Local servers are offline in this demo)"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host=settings.gateway_host, port=settings.gateway_port)
