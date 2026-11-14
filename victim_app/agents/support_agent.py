@@ -2,6 +2,11 @@ import asyncio
 import json
 import os
 import sys
+# Add the root project folder to the Python path so we can find the gateway
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
+from gateway.auth import issue_token
+from gateway.auth import issue_token
 from contextlib import AsyncExitStack
 
 from mcp import ClientSession
@@ -30,7 +35,10 @@ async def run(task: str):
         tool_owner = {}
         tools = []
         for url in SERVERS.values():
-            read, write, _ = await stack.enter_async_context(streamablehttp_client(url))
+            token = issue_token("support-agent", ["read", "refund", "email"])
+            read, write, _ = await stack.enter_async_context(
+                  streamablehttp_client(url, headers={"Authorization": f"Bearer {token}"})
+            )
             session = await stack.enter_async_context(ClientSession(read, write))
             await session.initialize()
             for t in (await session.list_tools()).tools:

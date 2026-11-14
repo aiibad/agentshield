@@ -1,0 +1,12 @@
+Terminal 1 (CRM):
+
+powershell
+uv run python victim_app/mcp_servers/crm_server.py
+Terminal 2 (Email):
+
+powershell
+uv run python victim_app/mcp_servers/email_server.py
+Terminal 3 (Gateway):
+
+powershell
+uv run python -m gateway.main
