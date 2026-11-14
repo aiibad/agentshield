@@ -1,3 +1,4 @@
+import os
 import time
 from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP, Context
@@ -20,29 +21,31 @@ ROUTES = {
 }
 
 proxy = MCPProxy({"crm": settings.crm_url, "email": settings.email_url})
+IS_RENDER = bool(os.environ.get("RENDER"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting Gateway proxy...")
-    try:
-        await proxy.start()
-        print("Gateway proxy started successfully!")
-    except Exception as e:
-        print(f"WARNING: Could not connect to local MCP servers: {e}")
-        print("Gateway is running in standalone mode (policies/auth will still work).")
+    if not IS_RENDER:
+        print("Starting Gateway proxy...")
+        try:
+            await proxy.start()
+            print("Gateway proxy started successfully!")
+        except BaseException as e:
+            print(f"WARNING: Could not connect to local MCP servers: {e}")
+    else:
+        print("Running on Render: Skipping proxy start (local MCP servers not available).")
     yield
-    try:
-        await proxy.stop()
-    except:
-        pass
+    if not IS_RENDER:
+        try:
+            await proxy.stop()
+        except:
+            pass
 
-# 1. Initialize MCP (without lifespan)
 mcp = FastMCP("agentshield-gateway")
 
 async def _guarded(tool: str, args: dict, ctx: Context) -> str:
     t0 = time.perf_counter()
     
-    # AUTHENTICATION
     auth_header = ctx.request_context.request.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
         return "DENIED: Missing bearer token"
@@ -54,19 +57,16 @@ async def _guarded(tool: str, args: dict, ctx: Context) -> str:
         
     agent = claims.get("sub", "unknown")
 
-    # AUTHORIZATION (Scopes)
     if not check_scope(claims, tool):
         reason = f"Agent '{agent}' lacks scope for '{tool}'"
         log(agent=agent, tool=tool, args=args, decision="deny", reason=reason, latency_ms=0)
         return f"DENIED: {reason}"
 
-    # POLICY (Arguments)
     ok, reason = validate(tool, args)
     if not ok:
         log(agent=agent, tool=tool, args=args, decision="deny", reason=reason, latency_ms=(time.perf_counter() - t0) * 1000)
         return f"DENIED: {reason}"
 
-    # FORWARD
     server, remote_tool = ROUTES[tool]
     try:
         out = await proxy.call(server, remote_tool, args)
@@ -75,7 +75,6 @@ async def _guarded(tool: str, args: dict, ctx: Context) -> str:
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# 2. Define MCP Tools
 @mcp.tool()
 async def search_customer(name: str = "", ctx: Context = None) -> str:
     """Search customers by name."""
@@ -96,14 +95,9 @@ async def send_email(to: str, subject: str, body: str, ctx: Context = None) -> s
     """Send an email to any recipient."""
     return await _guarded("send_email", {"to": to, "subject": subject, "body": body}, ctx)
 
-# 3. Create the FastAPI App for the UI
 app = FastAPI(title="AgentShield Gateway", lifespan=lifespan)
-
-# 4. Mount the MCP app at /mcp
 mcp_app = mcp.streamable_http_app()
 app.mount("/mcp", mcp_app)
-
-# 5. Add UI Routes
 app.mount("/static", StaticFiles(directory="gateway/static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
@@ -130,4 +124,11 @@ async def test_attack(req: AttackRequest):
         log(agent="web-ui", tool=real_tool, args=req.args, decision="deny", reason=reason, latency_ms=0)
         return {"status": "denied", "reason": reason}
     
-    return {"status": "allowed", "result": "Passed security policies! (Local servers are offline in this demo)"}
+    # Mock results for the live demo (since MCP servers are local)
+    mock_results = {
+        "send_email": f"Email sent to {req.args.get('to')}",
+        "issue_refund": f"Refunded {req.args.get('amount')} to customer {req.args.get('customer_id')}",
+        "search_customer": "[{'id': 1, 'name': 'Asha Patil', 'email': 'asha@example.com'}]",
+        "get_ticket": "Ticket #1: My order #123 has not arrived."
+    }
+    return {"status": "allowed", "result": mock_results.get(real_tool, "Success")}
